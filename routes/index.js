@@ -2,6 +2,8 @@ const { Router } = require("express");
 const { save } = require("../save_json");
 let favouriteNumber = require("../number.json");
 const add = require("../add");
+const AWS = require("aws-sdk");
+const S3 = new AWS.S3();
 
 const router = new Router();
 
@@ -9,7 +11,12 @@ router.get("/", (req, res) => {
   res.status(200).json( {status: "success", result: "Hello World"} );
 })
 
-router.get("/sum/:number1/:number2", (req, res) => {
+router.get("/sum/:number1/:number2", async (req, res) => {
+  let my_file = await S3.getObject({
+    Bucket: "cyclic-nice-fish-belt-eu-north-1",
+    Key: "number.json"
+  }).promise();
+  const favNumber = JSON.parse(my_file.Body)?.favouriteNumber;
   const {number1, number2} = req.params;
   if(number1 == null || number2 == null) {
     res.status(400).send("Not provided numbers");
@@ -19,14 +26,17 @@ router.get("/sum/:number1/:number2", (req, res) => {
     res.status(400).send("Numbers needs to be integer");
     return;
   }
-  const result = add(favouriteNumber.favouriteNumber, add(parseInt(number1), parseInt(number2)));
+  let result = add(parseInt(number1), parseInt(number2));
+  if(favNumber != null) {
+    result = add(result, favNumber);
+  }
   res.json({
     status: "success",
     result: result,
   }); 
 });
 
-router.post("/favNumber", (req, res) => {
+router.post("/favNumber", async (req, res) => {
   const {number} = req.body;
   if(number == null ) {
     res.status(400).send("Not provided number");
@@ -36,8 +46,9 @@ router.post("/favNumber", (req, res) => {
     res.status(400).send("The number needs to be integer");
     return;
   }
-  favouriteNumber.favouriteNumber = number;
-  save(favouriteNumber);
+  await save({
+    favouriteNumber: number
+  });
   res.json({
     status: "success",
     newFavouriteNumber: number,
